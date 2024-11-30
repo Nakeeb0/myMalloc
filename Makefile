@@ -22,7 +22,10 @@ ftimer.o: ftimer.c ftimer.h config.h
 clock.o: clock.c clock.h
 
 handin:
-	cp mm.c $(HANDINDIR)/$(TEAM)-$(VERSION)-mm.c
+	git tag -a -f submit -m "Submitting Lab"
+	git push
+	git push --tags -f
+
 
 clean:
 	rm -f *~ *.o mdriver
