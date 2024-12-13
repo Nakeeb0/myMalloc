@@ -1,0 +1,86 @@
+#OVERVIEW
+I used a segregated free list approach for the code, after some experimentation opting for 12 lists, each represents a power of 2 starting from the minimum block size.
+The free lists are linked lists, since free blocks have extra empty bytes, they are used to point to the next block an previous blocks in the free list, starting and terminating with NULL.
+Overall the code is somewhat structured around the ideas in the text book; Some code logic is taken from it, and the macros are copied from it.
+
+#DESCRIPTION
+All the macros and constants are explained in the comments but are quite self explanitory aswell.
+
+## Functions
+int mm_init(void):
+
+The first function called by the system, it initializes the first 20 words of the heap,
+reserving the first 17 for the heads of each freelist to be stored there and then the last three are used to initialize the prologue and epilogue blocks, after all of this the initialization is done and the extend heap function is called to give more heap space.
+
+
+static void* extend_heap(int words):
+
+Taking the requested size(which is usually 1<<12 after experimentally finding that it was the sweetspot) and aligning it to the 8 byte alignment, We use this size to call mem_sbrk(size) and then we move the prologue block to the correct place and then we right the free block header of the new block(which overwrites the previous prologue block), and then we coalesce in case the previous last block was free.
+
+
+static int ind(size_t size):
+
+This simply gets the index of which freelist the block belongs to, simply by dividing by 2 until finding it, binary search makes this much slower so it's not worth implementing on such a small number of lists
+
+
+static void insert_free(void *bp):
+
+This function inserts a block into a freelist, it checks which one it belongs to, then checks if there is a head already, if there is it makes the new block the head and connects it to the other block, if there is no head the new block becomes the head and points to NULL.
+
+
+static void remove_free(void *bp):
+
+Removes a block from the freelist, making its next the previous's next and its previous the next's previous, of course checking if they're not NULL before accessing, and if it was the head make it's next the head(notice that this works if the next is NULL)
+
+
+static void *coalesce(void *bp):
+
+Combines adjacent freeblocks into a single freeblock, the logic for this is quit concise.
+We store the size of the current block, if the next block is free we add it's size to our variable, if the previous block is free we make our pointer point to it instead and add its size aswell, then we write the header and footer using our pointer and size.
+This covers all conditions, we remove the free blocks before and after and insert the new one into a freelist.
+
+
+static void* fit(size_t size):
+
+This functions finds a free block to allocate.
+We use a kind of first fit logic, we get the first possible freelist, for this one we only check the head of it, if our target size fits into it we use it, otherwise we check the other lists, this is to remove needless searching, since any block from a higher freelist will always work, if none are found we iterate through its own free list, if none are found the function returns NULL to signify that it didn't find anything
+
+
+static void* split(void *bp, size_t asize):
+
+This function checks our requested size and the block we want to use, if it is significantly larger than the requested size, we split it into two blocks, if it fits the condition then we simply allocate the actual size to the start of the block and return it, while allocating the rest of the size to the rest of the block and adding it to a free list.
+
+
+void *mm_malloc(size_t size):
+
+This function is the main character and doesn't need an introduction.
+It aligns the requested size to our alignment and finds the block that fits this size using fit(), if fit() returns NULL(no blocks found), we use extend_heap() and use the newly added block of memory as our block, and then we use split() on our block and return it to the user.
+
+
+void mm_free(void *bp):
+
+This function frees the allocated block.
+Simply change the allocation bit of the header and footer, and then call coalesce on the block
+
+
+void *mm_realloc(void *ptr, size_t size):
+
+Change the size of an allocated block.
+Cover the condition where it's just free or malloc.
+If the new size is smaller just free the excess and return.
+If the new size is larger there are two conditions:
+1- there is space available right after the block to cover the expansion, in this case we will simply coalesce these two blocks by adding the size to the first block and the footer to the next block, and of course removing it from the free list
+2- otherwise we just call malloc and then copy the old data to the new block
+
+
+
+#BUGS
+debugging took way more time than it should've, why does not writing the team struct give a segmentation fault, that took me an entire hour to figure out, although it taught me how to use the debugging tools so thanks I guess.
+
+I didn't encounter as many pointer arithmetic bugs as I thought, mostly due to the macros, and I only accessed outside the heap once I think, most of my errors came from not correctly assigning the headers and footers of the blocks, and the package in the middle of the freeblocks.
+
+For example I had a bug where after splitting the freeblock I forgot to put its headers, resulting in extentions of the heap pretty much with every malloc call.
+
+And another also in split, I would forget to remove the block from the freelist before doing the operations, sometimes leading to the block being entered twice.
+
+Another was I was calling the GET_SIZE() macro to the poitner itself not it's head, leading to freeblocks pointer into another dimension instead of the next block.
